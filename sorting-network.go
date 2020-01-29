@@ -1,9 +1,33 @@
+/*
+The MIT License (MIT)
+
+Copyright (c) 2020 Brian Pursley
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+*/
+
 package main
 
 import (
 	"bufio"
-	"fmt"
 	"flag"
+	"fmt"
 	"github.com/projectdiscovery/subfinder/pkg/log"
 	"math/bits"
 	"os"
@@ -12,11 +36,60 @@ import (
 )
 
 type Comparator struct {
-	inputs [2]byte
+	i1 byte
+	i2 byte
+}
+
+func newComparator(s string) *Comparator {
+	inputs := strings.Split(s, ":")
+	i1, err := strconv.Atoi(inputs[0])
+	if err != nil {
+		log.Fatalf("Failed to parse input file")
+	}
+	i2, err := strconv.Atoi(inputs[1])
+	if err != nil {
+		log.Fatalf("Failed to parse input file")
+	}
+
+	c := new(Comparator)
+	if i1 < i2 {
+		c.i1 = byte(i1)
+		c.i2 = byte(i2)
+	} else {
+		c.i1 = byte(i2)
+		c.i2 = byte(i1)
+	}
+	return c
+}
+
+func (c Comparator) overlaps(other Comparator) bool {
+	return (c.i1 < other.i1 && other.i1 < c.i2) ||
+		(c.i1 < other.i2 && other.i2 < c.i2) ||
+		(other.i1 < c.i1 && c.i1 < other.i2) ||
+		(other.i1 < c.i2 && c.i2 < other.i2)
+}
+
+func (c Comparator) hasSameInput(other Comparator) bool {
+	return c.i1 == other.i1 ||
+		c.i1 == other.i2 ||
+		c.i2 == other.i1 ||
+		c.i2 == other.i2
 }
 
 type ComparisonNetwork struct {
 	comparators []Comparator
+}
+
+func newComparisonNetwork(file *os.File) *ComparisonNetwork {
+	cn := new(ComparisonNetwork)
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := scanner.Text()
+		for _, c := range strings.Split(line, ",") {
+			cn.comparators = append(cn.comparators, *newComparator(c))
+		}
+	}
+	return cn
 }
 
 // Use the zero-one principle to determine if this comparison network is a sorting network
@@ -28,8 +101,13 @@ func (cn ComparisonNetwork) isSortingNetwork() bool {
 	for sequence := uint(0); sequence <= maxSequenceToCheck; sequence++ {
 		go func(sequence uint) {
 			onesCount := byte(bits.OnesCount(sequence))
-			zerosCount := numberOfInputs - onesCount
-			expectedSortedSequence := uint(1 << onesCount - 1) << zerosCount
+			var expectedSortedSequence uint
+			if onesCount > 0 {
+				zerosCount := numberOfInputs - onesCount
+				expectedSortedSequence = uint(1<<onesCount-1) << zerosCount
+			} else {
+				expectedSortedSequence = 0
+			}
 			results <- cn.sortBinarySequence(sequence) == expectedSortedSequence
 		}(sequence)
 	}
@@ -47,18 +125,14 @@ func (cn ComparisonNetwork) isSortingNetwork() bool {
 func (cn ComparisonNetwork) sortBinarySequence(sequence uint) uint {
 	result := sequence
 	for _, c := range cn.comparators {
-		c.applyComparatorToBinarySequence(&result)
+		// Compare the two bits at the comparator's input positions and swap if needed
+		pos0 := (result >> c.i1) & 1
+		pos1 := (result >> c.i2) & 1
+		if pos0 > pos1 {
+			result ^= (1 << c.i1) | (1 << c.i2)
+		}
 	}
 	return result
-}
-
-// Compare the two bits at the comparator's input positions and swap if needed
-func (c Comparator) applyComparatorToBinarySequence(result *uint) {
-	pos0 := (*result >> c.inputs[0]) & 1
-	pos1 := (*result >> c.inputs[1]) & 1
-	if pos0 > pos1 {
-		*result ^= (1 << c.inputs[0]) | (1 << c.inputs[1])
-	}
 }
 
 // Sorts a sequence of numbers
@@ -66,8 +140,8 @@ func (cn ComparisonNetwork) sortSequence(sequence []int64) []int64 {
 	result := make([]int64, len(sequence))
 	copy(result, sequence)
 	for _, c := range cn.comparators {
-		if result[c.inputs[0]] > result[c.inputs[1]] {
-			result[c.inputs[0]], result[c.inputs[1]] = result[c.inputs[1]], result[c.inputs[0]]
+		if result[c.i1] > result[c.i2] {
+			result[c.i1], result[c.i2] = result[c.i2], result[c.i1]
 		}
 	}
 	return result
@@ -85,11 +159,8 @@ func stringToNumberSequence(s string) []int64 {
 func (cn ComparisonNetwork) getMaxInput() byte {
 	maxInput := byte(0)
 	for _, c := range cn.comparators {
-		if c.inputs[0] > maxInput {
-			maxInput = c.inputs[0]
-		}
-		if c.inputs[1] > maxInput {
-			maxInput = c.inputs[1]
+		if c.i2 > maxInput {
+			maxInput = c.i2
 		}
 	}
 	return maxInput
@@ -97,25 +168,24 @@ func (cn ComparisonNetwork) getMaxInput() byte {
 
 func (cn ComparisonNetwork) svg() string {
 	scale := 1
-	xscale := scale * 35
-	yscale := scale * 20
+	xScale := scale * 35
+	yScale := scale * 20
 
 	// Generate comparator SVG elements
 	comparatorsSvg := ""
-	w := xscale
+	w := xScale
 	group := map[Comparator]int{}
 	for _, c := range cn.comparators {
 
 		// If the comparator inputs are the same position as any other comparator in the group, then start a new group
-		for gc := range group {
-			if gc.inputs[0] == c.inputs[0] || gc.inputs[0] == c.inputs[1] || gc.inputs[1] == c.inputs[0] || gc.inputs[1] == c.inputs[1] {
-				max := 0
+		for other := range group {
+			if c.hasSameInput(other) {
 				for _, pos := range group {
-					if pos > max {
-						max = pos
+					if pos > w {
+						w = pos
 					}
 				}
-				w = max + xscale
+				w += xScale
 				group = map[Comparator]int{}
 				break
 			}
@@ -123,17 +193,15 @@ func (cn ComparisonNetwork) svg() string {
 
 		// Adjust the comparator x position to avoid overlapping any existing comparators in the group
 		cx := w
-		for g, gx := range group {
-			if comparatorsOverlap(c, g) {
-				if gx >= cx {
-					cx = gx + xscale / 3
-				}
+		for other, otherPos := range group {
+			if otherPos >= cx && c.overlaps(other) {
+				cx = otherPos + xScale / 3
 			}
 		}
-		y0 := yscale + int(c.inputs[0]) * yscale
-		y1 := yscale + int(c.inputs[1]) * yscale
 
 		// Generate two circles and a line representing the comparator
+		y0 := yScale + int(c.i1) * yScale
+		y1 := yScale + int(c.i2) * yScale
 		comparatorsSvg +=
 				fmt.Sprintf("<circle cx='%d' cy='%d' r='%d' style='stroke:black;stroke-width:1;fill=yellow' />", cx, y0, 3) +
 				fmt.Sprintf("<line x1='%d' y1='%d' x2='%d' y2='%d' style='stroke:black;stroke-width:%d' />", cx, y0, cx, y1, 1) +
@@ -145,57 +213,19 @@ func (cn ComparisonNetwork) svg() string {
 
 	// Generate line SVG elements
 	linesSvg := ""
-	w += xscale
+	w += xScale
 	n := int(cn.getMaxInput() + 1)
 	for i := 0; i < n; i++ {
-		y := yscale + i * yscale
+		y := yScale + i *yScale
 		linesSvg += fmt.Sprintf("<line x1='%d' y1='%d' x2='%d' y2='%d' style='stroke:black;stroke-width:%d' />", 0, y, w, y, 1)
 	}
 
-	h := (n + 1) * yscale
-	return fmt.Sprintf("<?xml version='1.0' encoding='utf-8'?><!DOCTYPE svg><svg width='%dpx' height='%dpx' xmlns='http://www.w3.org/2000/svg'>%s%s</svg>",
+	h := (n + 1) * yScale
+	return fmt.Sprintf(
+		"<?xml version='1.0' encoding='utf-8'?>" +
+		"<!DOCTYPE svg>" +
+		"<svg width='%dpx' height='%dpx' xmlns='http://www.w3.org/2000/svg'>%s%s</svg>",
 		w, h, comparatorsSvg, linesSvg)
-}
-
-func comparatorsOverlap(c1 Comparator, c2 Comparator) bool {
-	return (c2.inputs[0] > c1.inputs[0] && c2.inputs[0] < c1.inputs[1]) ||
-			(c2.inputs[1] > c1.inputs[0] && c2.inputs[1] < c1.inputs[1]) ||
-			(c1.inputs[0] > c2.inputs[0] && c1.inputs[0] < c2.inputs[1]) ||
-			(c1.inputs[1] > c2.inputs[0] && c1.inputs[1] < c2.inputs[1])
-}
-
-func newComparisonNetwork(file *os.File) *ComparisonNetwork {
-	cn := new(ComparisonNetwork)
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		line := scanner.Text()
-		for _, c := range strings.Split(line, ",") {
-			cn.comparators = append(cn.comparators, *newComparator(c))
-		}
-	}
-	return cn
-}
-
-func newComparator(s string) *Comparator {
-	inputs := strings.Split(s, ":")
-	input0, err := strconv.Atoi(inputs[0])
-	if err != nil {
-		log.Fatalf("Failed to parse input file")
-	}
-	input1, err := strconv.Atoi(inputs[1])
-	if err != nil {
-		log.Fatalf("Failed to parse input file")
-	}
-
-	c := new(Comparator)
-	if input0 < input1 {
-		c.inputs[0] = byte(input0)
-		c.inputs[1] = byte(input1)
-	} else {
-		c.inputs[0] = byte(input1)
-		c.inputs[1] = byte(input0)
-	}
-	return c
 }
 
 func main() {
@@ -233,7 +263,6 @@ func main() {
 	}
 
 	if *svgFlag {
-		//cn.svg()
 		fmt.Println(cn.svg())
 	}
 }
