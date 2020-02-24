@@ -28,7 +28,7 @@ import (
 	"bufio"
 	"flag"
 	"fmt"
-	"github.com/projectdiscovery/subfinder/pkg/log"
+	"log"
 	"math/bits"
 	"os"
 	"strconv"
@@ -44,11 +44,11 @@ func newComparator(s string) *Comparator {
 	inputs := strings.Split(s, ":")
 	i1, err := strconv.Atoi(inputs[0])
 	if err != nil {
-		log.Fatalf("Failed to parse input file")
+		log.Fatalf("invalid comparator: %s", s)
 	}
 	i2, err := strconv.Atoi(inputs[1])
 	if err != nil {
-		log.Fatalf("Failed to parse input file")
+		log.Fatalf("invalid comparator: %s", s)
 	}
 
 	c := new(Comparator)
