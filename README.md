@@ -9,7 +9,7 @@ You specify a comparison network as a comma-separated list of comparators, where
 
 ### Load a 16-input comparison network from a file and check if it is a sorting network 
 ```bash
-$ go run sorting-network.go -input examples/16-input.cn -check
+$ go run cmd/sortingnetwork/sortingnetwork.go -input examples/16-input.cn -check
 ```
 Output:
 ```
@@ -18,7 +18,7 @@ It is a sorting network!
 
 ### Check a 4-input comparison network from stdin
 ```bash
-$ echo 0:1,2:3,0:2,1:3,1:2 | go run sorting-network.go -check
+$ echo 0:1,2:3,0:2,1:3,1:2 | go run cmd/sortingnetwork/sortingnetwork.go -check
 ```
 Output:
 ```
@@ -27,7 +27,7 @@ It is a sorting network!
 
 ### Check a 4-input comparison network from stdin (Not a sorting network)
 ```bash
-$ echo 0:1,2:3,0:2,1:3 | go run sorting-network.go -check
+$ echo 0:1,2:3,0:2,1:3 | go run cmd/sortingnetwork/sortingnetwork.go -check
 ```
 Output:
 ```
@@ -36,7 +36,7 @@ It is not a sorting network.
 
 ### Load a 4-input comparison network from a file and render it as an SVG
 ```bash
-$ go run sorting-network.go -input examples/4-input.cn -svg > examples/4-input.svg
+$ go run cmd/sortingnetwork/sortingnetwork.go -input examples/4-input.cn -svg > examples/4-input.svg
 ```
 
 ### Load a 4-input comparison network from a file and render it as a PNG
@@ -44,7 +44,7 @@ $ go run sorting-network.go -input examples/4-input.cn -svg > examples/4-input.s
 You can use rsvg-convert to convert the output from SVG to some other format, like PNG.  rsvg-convert can be installed by using `sudo apt-get install librsvg2-bin` on Ubuntu.
 
 ```bash
-$ go run sorting-network.go -input examples/4-input.cn -svg | rsvg-convert > examples/4-input.png
+$ go run cmd/sortingnetwork/sortingnetwork.go -input examples/4-input.cn -svg | rsvg-convert > examples/4-input.png
 ```
 
 ## Example sorting networks
